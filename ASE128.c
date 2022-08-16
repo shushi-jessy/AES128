@@ -3,18 +3,24 @@
 static uint8_t gmul(uint8_t a, uint8_t b); // Finite field multiplication
 static void AES128_KeySchedule(uint8_t *key);
 
-static uint8_t Round_Key[40][4] = {0};
+static void InvSubBytes(uint8_t state[4][4]);
+static void InvShiftRows(uint8_t state[4][4]);
+static void AddRoundKey(uint8_t state[4][4],uint8_t round);
+static void InvMixColumns(uint8_t state[4][4]);
+
+static uint8_t Round_Key[44][4] = {0};
 /*
-    Round Key 1:    Round_Key[0][0~3]   Round_Key[1][0~3]   Round_Key[2][0~3]   Round_Key[3][0~3]      = > Used defined key itself (1-double-word length)
-    Round Key 2:    Round_Key[4][0~3]   Round_Key[5][0~3]   Round_Key[6][0~3]   Round_Key[7][0~3]
-    Round Key 3:    Round_Key[8][0~3]   Round_Key[9][0~3]   Round_Key[10][0~3]  Round_Key[11][0~3]
-    Round Key 4:    Round_Key[12][0~3]  Round_Key[13][0~3]  Round_Key[14][0~3]  Round_Key[15][0~3]
-    Round Key 5:    Round_Key[16][0~3]  Round_Key[17][0~3]  Round_Key[18][0~3]  Round_Key[19][0~3]
-    Round Key 6:    Round_Key[20][0~3]  Round_Key[21][0~3]  Round_Key[22][0~3]  Round_Key[23][0~3]
-    Round Key 7:    Round_Key[24][0~3]  Round_Key[25][0~3]  Round_Key[26][0~3]  Round_Key[27][0~3]
-    Round Key 8:    Round_Key[28][0~3]  Round_Key[29][0~3]  Round_Key[30][0~3]  Round_Key[31][0~3]
-    Round Key 9:    Round_Key[32][0~3]  Round_Key[33][0~3]  Round_Key[34][0~3]  Round_Key[35][0~3]
-    Round Key 10:   Round_Key[36][0~3]  Round_Key[37][0~3]  Round_Key[38][0~3]  Round_Key[39][0~3]
+    Round Key 0:    Round_Key[0][0~3]   Round_Key[1][0~3]   Round_Key[2][0~3]   Round_Key[3][0~3]      = > Used defined key itself (1-double-word length)
+    Round Key 1:    Round_Key[4][0~3]   Round_Key[5][0~3]   Round_Key[6][0~3]   Round_Key[7][0~3]
+    Round Key 2:    Round_Key[8][0~3]   Round_Key[9][0~3]   Round_Key[10][0~3]  Round_Key[11][0~3]
+    Round Key 3:    Round_Key[12][0~3]  Round_Key[13][0~3]  Round_Key[14][0~3]  Round_Key[15][0~3]
+    Round Key 4:    Round_Key[16][0~3]  Round_Key[17][0~3]  Round_Key[18][0~3]  Round_Key[19][0~3]
+    Round Key 5:    Round_Key[20][0~3]  Round_Key[21][0~3]  Round_Key[22][0~3]  Round_Key[23][0~3]
+    Round Key 6:    Round_Key[24][0~3]  Round_Key[25][0~3]  Round_Key[26][0~3]  Round_Key[27][0~3]
+    Round Key 7:    Round_Key[28][0~3]  Round_Key[29][0~3]  Round_Key[30][0~3]  Round_Key[31][0~3]
+    Round Key 8:    Round_Key[32][0~3]  Round_Key[33][0~3]  Round_Key[34][0~3]  Round_Key[35][0~3]
+    Round Key 9:    Round_Key[36][0~3]  Round_Key[37][0~3]  Round_Key[38][0~3]  Round_Key[39][0~3]
+    Round Key 10:   Round_Key[40][0~3]  Round_Key[41][0~3]  Round_Key[42][0~3]  Round_Key[43][0~3]
 */
 
 static uint8_t RCON[255] =
@@ -89,12 +95,12 @@ static uint8_t MIXER[4][4] =
     {0x01,0x01,0x03,0x02}
 };
 
-static uint8_t MIXERinv[16] =
+static uint8_t MIXERinv[4][4] =
 {
-    0x14,0x09,0x13,0x11,
-    0x11,0x14,0x09,0x13,
-    0x13,0x11,0x14,0x09,
-    0x09,0x13,0x11,0x14
+    {0x0E,0x09,0x0D,0x0B},
+    {0x0B,0x0E,0x09,0x0D},
+    {0x0D,0x0B,0x0E,0x09},
+    {0x09,0x0D,0x0B,0x0E}
 };
 
 
@@ -104,15 +110,15 @@ void ASE128_Enc(uint8_t *data,uint8_t* key)
     AES128_KeySchedule(key);
 
     uint8_t temp[4][4]={0};         // A 4*4 matrix temporary variable 1
-    printf("Text:\t");
+    //printf("Text:\t");
     for(uint8_t i=0;i<4;i++)        // Initialize temps with data XOR with root key
         for(uint8_t j=0;j<4;j++)
         {
-            printf("%02x ",*data);
+            //printf("%02x ",*data);
             temp[i][j]=(*data++) ^ Round_Key[i][j];
         }
 
-    printf("\n");
+    //printf("\n");
 
 
     for(uint8_t round=1;round<=10;round++)
@@ -121,7 +127,6 @@ void ASE128_Enc(uint8_t *data,uint8_t* key)
         for(uint8_t i=0;i<4;i++)
             for(uint8_t j=0;j<4;j++)
                 temp[i][j]=SBOX[temp[i][j]];
-
 
         // Step 2: Shift the row
         uint8_t temp2[4][4]=            // A 4*4 matrix temporary variable 2
@@ -155,13 +160,99 @@ void ASE128_Enc(uint8_t *data,uint8_t* key)
         }
     }
 
-    printf("Encode:\t");
+    printf(" Encode:");
     for(uint8_t i=0;i<4;i++)
         for(uint8_t j=0;j<4;j++)
-            printf("%02x ",temp[i][j]);printf("\n");
+            printf("0x%02x ",temp[i][j]);printf("\n");
+    printf("       ");
+    for(uint8_t i=0;i<4;i++)
+        for(uint8_t j=0;j<4;j++)printf("  %c  ",temp[i]);printf("\n");
+}
+void ASE128_Dec(uint8_t *data,uint8_t* key)
+{
+    // Generate round keys:
+    AES128_KeySchedule(key);
 
+    // Get data length:
+    uint16_t length = 0;
+    for(uint16_t i=0;data[i]!= 0;i++)length++;
+    uint8_t pad = length/16;
+    for(uint16_t i=length;i<pad;i++)data[i]=255;
+    uint8_t cypher[1000]={0};
+    for(uint8_t block=0;block<length;block=block+16)
+    {
+        uint8_t state[4][4]={0};
+
+        for(uint8_t i=0;i<4;i++)
+            for(uint8_t j=0;j<4;j++)
+                state[i][j]=(*data++);
+
+        AddRoundKey(state,0);
+
+        for(uint8_t round=1;round<=10;round++)
+        {
+            // Step 1:
+            InvShiftRows(state);
+
+            // Step 2:
+            InvSubBytes(state);
+
+            // Step 3:
+            AddRoundKey(state,round);
+
+            // Step 4:
+            if(round<10)InvMixColumns(state);
+        }
+
+        for(uint8_t i=0;i<4;i++)
+            for(uint8_t j=0;j<4;j++)
+                cypher[(i<<2)+j]=state[i][j];
+
+    }
+    for(uint16_t i=0;i<length;i++)printf("%02x ",cypher[i]);
 
 }
+
+
+
+static void InvSubBytes(uint8_t state[4][4])
+{
+    for(uint8_t i=0;i<4;i++)
+        for(uint8_t j=0;j<4;j++)
+            state[i][j]=SBOXinv[state[i][j]];
+}
+static void InvShiftRows(uint8_t state[4][4])
+{
+    uint8_t temp[4][4]=
+    {
+      {state[0][0], state[3][1], state[2][2], state[1][3]},
+      {state[1][0], state[0][1], state[3][2], state[2][3]},
+      {state[2][0], state[1][1], state[0][2], state[3][3]},
+      {state[3][0], state[2][1], state[1][2], state[0][3]},
+    };
+    for(uint8_t i=0;i<4;i++)
+        for(uint8_t j=0;j<4;j++)
+            state[i][j]=temp[i][j];
+}
+static void AddRoundKey(uint8_t state[4][4],uint8_t round)
+{
+    for(uint8_t i=0;i<4;i++)
+        for(uint8_t j=0;j<4;j++)
+            state[i][j]^=Round_Key[40-(round<<2)+i][j];
+}
+static void InvMixColumns(uint8_t state[4][4])
+{
+    uint8_t temp[4][4]={0};
+    for(uint8_t i=0;i<4;i++)
+        for(uint8_t j=0;j<4;j++)
+        {
+           for(uint8_t k=0;k<4;k++)
+                temp[i][j]^=gmul(MIXERinv[k][j],state[i][k]);
+        }
+     for(uint8_t i=0;i<4;i++)
+        for(uint8_t j=0;j<4;j++)state[i][j]=temp[i][j];
+}
+
 /* Multiply two numbers in the GF(2^8) finite field defined
  * by the modulo polynomial relation x^8 + x^4 + x^3 + x + 1 = 0
  * (the other way being to do carryless multiplication followed by a modular reduction)
@@ -193,22 +284,23 @@ static void AES128_KeySchedule(uint8_t *key)
         {// Key expansion: each round key has 4 doublewords: 4*10=40 in total,but the root key(1-round key)does not change, thus starts from 4th(count from 0) word and finish at 40+4=44 words
 
             // Step 1: Rotate the previous doubleword
+            //printf(" Assignement: 0x");for(uint8_t j=0;j<4;j++)printf("%02x",Round_Key[i-1][j]);printf("\t");
             temp[0] = Round_Key[i-1][1];
             temp[1] = Round_Key[i-1][2];
             temp[2] = Round_Key[i-1][3];
             temp[3] = Round_Key[i-1][0];
-            //printf(" Rotate: 0x");for(uint8_t j=0;j<4;j++)printf("%02x",Round_Key[i-4][j]);printf("\t");
+            //printf(" Rotation: 0x");for(uint8_t j=0;j<4;j++)printf("%02x",temp[j]);printf("\t");
 
             // Step 2: Refer to S-Box table
             temp[0]=SBOX[temp[0]];
             temp[1]=SBOX[temp[1]];
             temp[2]=SBOX[temp[2]];
             temp[3]=SBOX[temp[3]];
-            //printf(" S-BOX: 0x");for(uint8_t j=0;j<4;j++)printf("%02x",Round_Key[i-4][j]);printf("\t");
+            //printf(" S-BOX: 0x");for(uint8_t j=0;j<4;j++)printf("%02x",temp[j]);printf("\t");
 
             // Step 3: Refer to RCON table for each first byte of a doubleword
             temp[0]^= RCON[iteration++];
-            //printf(" RCON(=%02x): 0x",RCON[iteration++]);for(uint8_t j=0;j<4;j++)printf("%02x",Round_Key[i-4][j]);printf("\t");
+            //printf(" RCON(=%02x): 0x",RCON[iteration++]);for(uint8_t j=0;j<4;j++)printf("%02x",temp[j]);printf("\t");
 
             // Step 4: XOR the (n-4)(n-3)(n-2)(n-1) double word
             for(uint8_t j=0;j<4;j++)
@@ -222,20 +314,15 @@ static void AES128_KeySchedule(uint8_t *key)
                 Round_Key[i+j][2]= temp[2];
                 Round_Key[i+j][3]= temp[3];
             }
-            /*printf(" XORn-4: 0x");
-            for(uint8_t j=0;j<4;j++)printf("%02x",Round_Key[i-4][j]);
-            for(uint8_t j=0;j<4;j++)printf("%02x",Round_Key[i-3][j]);
-            for(uint8_t j=0;j<4;j++)printf("%02x",Round_Key[i-2][j]);
-            for(uint8_t j=0;j<4;j++)printf("%02x",Round_Key[i-1][j]);
-            printf("\n");
-            */
-            {
+            //printf(" XORn-4: 0x"); for(uint8_t j=0;j<4;j++)printf("%02x",temp[j]);printf("\n");
+
+            /*{
                 printf(" %d round key:\t",i/4-1);
                 for(uint8_t j=0;j<4;j++)printf("%02x  ",Round_Key[i-4][j]);
                 for(uint8_t j=0;j<4;j++)printf("%02x  ",Round_Key[i-3][j]);
                 for(uint8_t j=0;j<4;j++)printf("%02x  ",Round_Key[i-2][j]);
                 for(uint8_t j=0;j<4;j++)printf("%02x  ",Round_Key[i-1][j]);
                 printf("\n");
-            }
+            }*/
         }
 }
