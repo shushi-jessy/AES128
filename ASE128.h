@@ -4,10 +4,10 @@
 #include <stdint.h>
 #include <assert.h>
 
-void ASE128_Enc(uint8_t *data,uint8_t* key);
-void ASE128_Dec(uint8_t *data,uint8_t* key);
+void ASE128_BlockEncryption(uint8_t plaintext[4][4],uint8_t key[4][4],uint8_t cipher[4][4]);
+void ASE128_BlockDecryption(uint8_t cipher[4][4],uint8_t key[4][4],uint8_t plaintext[4][4]);
 
-
+void Padding_Encryption(uint8_t* pleintext,uint8_t length);
 
 
 
